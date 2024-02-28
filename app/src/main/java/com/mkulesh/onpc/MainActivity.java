@@ -40,7 +40,11 @@ import com.mkulesh.onpc.iscp.DeviceList;
 import com.mkulesh.onpc.iscp.State;
 import com.mkulesh.onpc.iscp.StateHolder;
 import com.mkulesh.onpc.iscp.StateManager;
-import com.mkulesh.onpc.iscp.messages.*;
+import com.mkulesh.onpc.iscp.messages.BroadcastResponseMsg;
+import com.mkulesh.onpc.iscp.messages.PowerStatusMsg;
+import com.mkulesh.onpc.iscp.messages.ReceiverInformationMsg;
+import com.mkulesh.onpc.iscp.messages.InputSelectorMsg;
+import com.mkulesh.onpc.iscp.messages.ServiceType;
 import com.mkulesh.onpc.iscp.scripts.AutoPower;
 import com.mkulesh.onpc.iscp.scripts.MessageScript;
 import com.mkulesh.onpc.iscp.scripts.MessageScriptIf;
@@ -53,7 +57,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Logger;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -346,10 +349,16 @@ public class MainActivity extends AppCompatActivity implements StateManager.Stat
         final PowerStatusMsg cmdMsg = new PowerStatusMsg(getStateManager().getState().getActiveZone(), p);
 
         // if usb is used, save the current playback path
-        if (state.isUsb() && configuration.isContinueEnabled()) {
+        if (state.isOn() && state.isUsb() && configuration.isContinueEnabled()) {
+            // TODO: the path can be incomplete sometimes, find those edge cases and fix them
             List<String> path = state.pathItems;
             path.add(state.title);
             configuration.setContinuePath(path);
+        }
+
+        // cleanup saved position if the receiver is turned on without the repeat function
+        if (configuration.isContinueEnabled() && !state.isOn()) {
+            configuration.clearContinuePath();
         }
 
         if (state.isOn() && isMultiroomAvailable() && state.isMasterDevice())
@@ -367,13 +376,16 @@ public class MainActivity extends AppCompatActivity implements StateManager.Stat
         List<String> path = configuration.getContinuePath();
         if (path != null) {
             String lastitem = path.remove(path.size()-1);
+            // use a pseudo favorite to continue playback from the saved position
+            // TODO: do not hardcode the input type and service types, but store them as well
             CfgFavoriteShortcuts.Shortcut sc = new CfgFavoriteShortcuts.Shortcut(
-                    42,
+                    0,
                     InputSelectorMsg.InputType.USB_FRONT,
                     ServiceType.USB_FRONT,
-                    lastitem,""
+                    lastitem,"continuePlayback"
             );
             sc.setPathItems(path,this,ServiceType.USB_FRONT);
+            Toast.makeText(this, getText(R.string.menu_continue)+": "+lastitem, Toast.LENGTH_LONG).show();
             getStateManager().applyShortcut(this,sc);
             configuration.clearContinuePath();
         }
